@@ -2,171 +2,132 @@ globalThis.crypto = require('node:crypto').webcrypto;
 require('dotenv').config();
 const path = require('path');
 const fs = require('fs');
+const express = require('express');
+const mongoose = require('mongoose');
 const figlet = require('figlet');
 const chalk = require('chalk');
+const pino = require('pino');
 const {
   default: makeWASocket,
-  useMultiFileAuthState,
+  useMongoAuthState,
   fetchLatestBaileysVersion,
   DisconnectReason,
-  makeCacheableSignalKeyStore,
   proto,
 } = require('@whiskeysockets/baileys');
 
 const config = require('./config/config');
-const logger = require('./utils/logger');
 const { loadCommands } = require('./utils/commandLoader');
-const { registerConnectionHandler } = require('./events/connection');
-const { registerMessageHandler } = require('./events/messages');
-const { acquireLock, releaseLock } = require('./utils/instanceLock');
-const { groupCache } = require('./utils/groupCache');
 
-acquireLock();
+const logger = pino({ level: 'silent' });
+const commands = loadCommands(path.join(__dirname, 'commands'));
+const app = express();
+const PORT = process.env.PORT || 3000;
 
-function restoreSettingsFromEnv() {
-  const settingsPath = path.join(__dirname, 'config', 'botSettings.json');
-  if (config.botSettingsData && !fs.existsSync(settingsPath)) {
-    try {
-      const raw = Buffer.from(config.botSettingsData, 'base64').toString('utf8');
-      fs.writeFileSync(settingsPath, raw);
-      logger.info('✅ Restored bot settings from BOT_SETTINGS_DATA.');
-    } catch (error) {
-      logger.error(`[restoreSettingsFromEnv] Failed to restore settings: ${error.message}`);
-    }
-  }
+app.use(express.json());
+app.use(express.static(path.join(__dirname, 'public')));
+
+// ─── MULTI-SESSION MANAGER ───
+const sessions = new Map();
+
+// ─── DATABASE ───
+const MONGO_URI = process.env.MONGO_URI;
+if (!MONGO_URI) {
+    console.error("❌ FATAL ERROR: MONGO_URI is not set in your Environment Variables.");
+    process.exit(1);
 }
+mongoose.connect(MONGO_URI).then(() => console.log("✅ Database connected")).catch(err => console.error("DB Error:", err.message));
 
-function restoreSessionFromEnv() {
-  const authDir = path.join(__dirname, config.authFolder);
-  const credsPath = path.join(authDir, 'creds.json');
-  if (fs.existsSync(credsPath)) return;
+// ─── PAIRING SITE API ───
+app.post('/pair', async (req, res) => {
+    const { phone, sessionId } = req.body;
+    if (!phone || phone.length < 10) return res.status(400).json({ error: "Invalid phone number" });
 
-  try {
-    const settingsStore = require('./utils/settingsStore');
-    if (settingsStore.get('_sessionLoggedOut', false)) {
-      logger.warn('[restoreSession] Last session was logged out. Skipping restoration.');
-      settingsStore.set('_sessionLoggedOut', false);
-      return;
-    }
-  } catch {}
+    const id = sessionId || `user_${phone}`;
 
-  let raw = config.sessionId;
-  if (!raw) {
     try {
-      const settingsStore = require('./utils/settingsStore');
-      raw = settingsStore.get('_sessionBackup', null);
-    } catch {}
-  }
-  if (!raw) return;
+        if (sessions.has(id)) return res.status(400).json({ error: "Session already active. Please use a different ID." });
+        await createSession(id, phone);
+        res.json({ success: true, message: "Pairing code is being sent to your WhatsApp!", sessionId: id });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
 
-  try {
-    if (!fs.existsSync(authDir)) fs.mkdirSync(authDir, { recursive: true });
-    const buffer = Buffer.from(raw.replace(/^PRIMACY-SPX:~/, ''), 'base64');
-    fs.writeFileSync(credsPath, buffer);
-    logger.info('✅ Restored session from SESSION_ID.');
-  } catch (error) {
-    logger.error(`[restoreSessionFromEnv] Failed to restore session: ${error.message}`);
-  }
-}
-
-const commandsPath = path.join(__dirname, 'commands');
-let commands = {};
-let wapresenceInterval = null;
-let autobioInterval = null;
-
-async function startBot() {
-  try {
-    restoreSessionFromEnv();
-    restoreSettingsFromEnv();
-
-    const { state, saveCreds } = await useMultiFileAuthState(path.join(__dirname, config.authFolder));
-    const wasAlreadyRegistered = state.creds.registered;
+// ─── CREATE AND RUN A SESSION ───
+async function createSession(sessionId, phone) {
+    const { state, saveCreds } = await useMongoAuthState(MONGO_URI, { session: sessionId });
     const { version } = await fetchLatestBaileysVersion();
 
     const sock = makeWASocket({
-      version,
-      auth: { creds: state.creds, keys: makeCacheableSignalKeyStore(state.keys, logger) },
-      logger,
-      connectTimeoutMs: 90000,
-      keepAliveIntervalMs: 15000,
-      browser: ['Ubuntu', 'Chrome', '120.0.6099.130'],
-      getMessage: async (key) => {
-        const messageCache = require('./utils/messageCache');
-        const cached = messageCache.get(key.remoteJid, key.id);
-        if (cached?.rawMessage) return cached.rawMessage;
-        return proto.Message.fromObject({});
-      },
+        version, auth: state, logger,
+        browser: ['Ubuntu', 'Chrome', '120.0.6099.130'],
+        connectTimeoutMs: 60000,
+        getMessage: async () => proto.Message.fromObject({})
     });
 
     sock.ev.on('creds.update', saveCreds);
-    sock.ev.on('creds.update', async () => {
-      try {
-        const settingsStore = require('./utils/settingsStore');
-        const credsPath = path.join(__dirname, config.authFolder, 'creds.json');
-        if (fs.existsSync(credsPath)) {
-          const sessionId = `PRIMACY-SPX:~${fs.readFileSync(credsPath).toString('base64')}`;
-          settingsStore.set('_sessionBackup', sessionId);
+
+    setTimeout(async () => {
+        try {
+            const code = await sock.requestPairingCode(phone);
+            await sock.sendMessage(phone + "@s.whatsapp.net", { 
+                text: `🔑 *PRIMACY_SPX ULTRA Pairing Code:*\n\n${code}\n\nEnter this on WhatsApp > Linked Devices > Link with phone number.`
+            });
+        } catch (e) { console.log(`[${sessionId}] Pairing Code failed:`, e.message); }
+    }, 3000);
+
+    sock.ev.on('connection.update', async (update) => {
+        const { connection, lastDisconnect } = update;
+
+        if (connection === 'open') {
+            console.log(`✅ ${sessionId} connected as ${sock.user.id}`);
+            const sessionString = `PRIMACY-SPX:~${Buffer.from(JSON.stringify(state.creds)).toString('base64')}`;
+            const successMsg = `✦ PRIMACY_SPX_ULTRA ✦\n✅ CONNECTED & ACTIVE\n\n📱 Connected : ${sock.user.id}\n📦 Commands : ${Object.keys(commands).length}\n\n─ [ SESSION CREATED ] ─\nName: ${config.botName}\nStatus: ⏳ Waiting Deployment\n\n⚠️ Your Session ID (Keep Private):\n\n${sessionString}`;
+            
+            await sock.sendMessage(phone + "@s.whatsapp.net", { text: successMsg });
+            console.log(`📨 Session ID sent to ${phone}`);
         }
-      } catch (e) { logger.warn('[sessionBackup] Could not back up session to DB:', e.message); }
+
+        if (connection === 'close') {
+            const statusCode = lastDisconnect?.error?.output?.statusCode;
+            if (statusCode !== DisconnectReason.loggedOut) {
+                console.log(`[${sessionId}] Closed, reconnecting in 5s...`);
+                setTimeout(() => createSession(sessionId, phone), 5000);
+            } else {
+                sessions.delete(sessionId);
+            }
+        }
     });
 
-    sock.ev.on('connection.update', async ({ connection, lastDisconnect }) => {
-      if (connection === 'close') {
-        const status = lastDisconnect?.error?.output?.statusCode;
-        if (status === DisconnectReason.loggedOut) {
-          releaseLock();
-          try {
-            const settingsStore = require('./utils/settingsStore');
-            settingsStore.set('_sessionBackup', null);
-            settingsStore.set('_sessionLoggedOut', true);
-            const authDir = path.join(__dirname, config.authFolder);
-            fs.rmSync(authDir, { recursive: true, force: true });
-          } catch {}
+    sock.ev.on('messages.upsert', async ({ messages, type }) => {
+        if (type !== 'notify') return;
+        for (const msg of messages) {
+            try {
+                if (!msg.message || msg.key.fromMe) continue;
+                const text = msg.message.conversation || msg.message.extendedTextMessage?.text || "";
+                if (!text.startsWith(config.prefix)) continue;
+
+                let args = text.slice(config.prefix.length).trim().split(/\s+/);
+                let cmdName = args.shift().toLowerCase();
+                let command = commands.get(cmdName);
+
+                if (command) {
+                    await command.execute(sock, msg.key.remoteJid, args, msg, { commands: commands });
+                }
+            } catch (e) { console.error(`[${sessionId}] Message error:`, e.message); }
         }
-      }
     });
 
-    // Register Events
-    registerConnectionHandler(sock, startBot, wasAlreadyRegistered);
-    registerMessageHandler(sock, commands);
-
-    // Load local commands
-    commands = loadCommands(commandsPath);
-    console.log('📦 Loaded ' + Object.keys(commands).length + ' commands');
-
-    // Presence and Auto-bio
-    if (wapresenceInterval) clearInterval(wapresenceInterval);
-    wapresenceInterval = setInterval(async () => {
-      try {
-        const settingsStore = require('./utils/settingsStore');
-        if (settingsStore.get('wapresence', false)) await sock.sendPresenceUpdate('available');
-      } catch (e) {}
-    }, 30000);
-
-    if (autobioInterval) clearInterval(autobioInterval);
-    autobioInterval = setInterval(async () => {
-      try {
-        const settingsStore = require('./utils/settingsStore');
-        if (!settingsStore.get('autobio', false)) return;
-        const quotes = JSON.parse(fs.readFileSync(path.join(__dirname, 'config', 'autobioQuotes.json'), 'utf8'));
-        const quoteIndex = Math.floor(Date.now() / 43200000) % quotes.length;
-        const quote = quotes[quoteIndex];
-        const now = new Date();
-        const timeStr = now.toLocaleTimeString('en-GB', { timeZone: config.timezone, hour: '2-digit', minute: '2-digit' });
-        const dateStr = now.toLocaleDateString('en-GB', { timeZone: config.timezone });
-        await sock.updateProfileStatus(`PRIMACY_SPX ULTRA is alive now\n${dateStr} ${timeStr}\n"${quote}"`);
-      } catch (e) {}
-    }, 60000);
-
-  } catch (error) {
-    logger.error(`[startBot] Failed to start the bot: ${error.message}`);
-  }
+    sessions.set(sessionId, sock);
+    return sock;
 }
 
-process.on('uncaughtException', (error) => logger.error(`[uncaughtException] ${error.stack || error.message}`));
-process.on('unhandledRejection', (reason) => logger.error(`[unhandledRejection] ${reason}`));
+// ─── START SERVER ───
+app.listen(PORT, () => {
+    console.log(chalk.green(figlet.textSync('PRIMACY SPX', { font: 'Standard' })));
+    console.log(chalk.cyan(`🚀 Multi-Session Pairing Site running at port ${PORT}`));
+    console.log("📦 Loaded " + Object.keys(commands).length + " commands");
+});
 
-console.log(chalk.green(figlet.textSync('PRIMACY SPX', { font: 'Standard' })));
-console.log(chalk.cyan('🤖 PRIMACY_SPX ULTRA is starting up...'));
-
-startBot();
+process.on("uncaughtException", (e) => console.error("Uncaught:", e));
+process.on("unhandledRejection", (e) => console.error("Rejection:", e));
