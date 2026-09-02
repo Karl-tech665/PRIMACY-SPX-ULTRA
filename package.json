@@ -1,0 +1,32 @@
+{
+  "name": "primacy-spx-ultra",
+  "version": "2.0.0",
+  "description": "PRIMACY_SPX ULTRA – WhatsApp Multi-Device Bot by Supreme Prime",
+  "main": "index.js",
+  "type": "commonjs",
+  "scripts": { "start": "node index.js" },
+  "dependencies": {
+    "@hapi/boom": "^10.0.1",
+    "@img/sharp-wasm32": "^0.35.3",
+    "@whiskeysockets/baileys": "^7.0.0-rc13",
+    "axios": "^1.18.1",
+    "chalk": "^4.1.2",
+    "dotenv": "^17.4.2",
+    "express": "^5.2.1",
+    "ffmpeg-static": "^5.3.0",
+    "figlet": "^1.11.0",
+    "fluent-ffmpeg": "^2.1.3",
+    "form-data": "^4.0.6",
+    "jimp": "^1.6.1",
+    "node-cache": "^5.1.2",
+    "node-fetch": "^2.7.0",
+    "node-webpmux": "^3.2.1",
+    "pg": "^8.22.0",
+    "pino": "^9.4.0",
+    "qrcode-terminal": "^0.12.0",
+    "sharp": "^0.35.3",
+    "wa-sticker-formatter": "^4.4.4",
+    "yt-search": "^2.13.1"
+  },
+  "engines": { "node": ">=18.0.0" }
+}
