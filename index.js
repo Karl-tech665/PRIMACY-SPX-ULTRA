@@ -24,6 +24,7 @@ app.use(express.static(path.join(__dirname, 'public')));
 
 const sessions = new Map();
 const pendingPairings = new Map();
+const reconnectTimers = new Map(); // FIXED: Store reconnection timers to cancel them
 
 const MONGO_URI = process.env.MONGO_URI;
 if (!MONGO_URI) { console.error("❌ FATAL ERROR: MONGO_URI is not set."); process.exit(1); }
@@ -31,20 +32,17 @@ mongoose.connect(MONGO_URI).then(() => console.log("✅ Database connected")).ca
 
 // ─── FUNCTION TO CLEAR THE SESSION FROM MONGO ───
 async function forceDeleteSessionFromDB(phone) {
+    const sessionId = `user_${phone}`;
     try {
-        // Connect to the raw MongoDB client to delete the session document directly
-        const mongoClient = mongoose.connection.client;
-        const db = mongoClient.db(mongoose.connection.name); // The database name
-        const collection = db.collection('baileyssessions');
-        
-        // The session ID used by @ecync/wsm is usually `user_<phone>`
-        const sessionId = `user_${phone}`;
+        // Get raw database instance to manipulate collections directly
+        const db = mongoose.connection.db;
+        // The @ecync/wsm library stores sessions in a collection named 'sessions'
+        const collection = db.collection('sessions');
         
         await collection.deleteOne({ _id: sessionId });
         console.log(`🗑️ Forcefully deleted old session for ${phone} from MongoDB.`);
-        
     } catch (e) {
-        console.log(`⚠️ Could not delete old session from MongoDB (might not exist): ${e.message}`);
+        console.log(`⚠️ Could not delete old session (might not exist): ${e.message}`);
     }
 }
 
@@ -54,9 +52,16 @@ app.post('/pair', async (req, res) => {
 
     const id = `user_${phone}`;
 
-    // ✅ FORCEFULLY CLEAR OLD SESSION FROM DB BEFORE PAIRING
+    // ✅ CANCEL ANY PENDING RECONNECT TIMERS
+    if (reconnectTimers.has(id)) {
+        clearTimeout(reconnectTimers.get(id));
+        reconnectTimers.delete(id);
+    }
+
+    // ✅ FORCEFULLY CLEAR OLD SESSION FROM DB
     await forceDeleteSessionFromDB(phone);
 
+    // ✅ CLEAR IN-MEMORY SESSION
     if (sessions.has(id)) {
         try { const oldSock = sessions.get(id); oldSock?.ev?.removeAllListeners(); oldSock?.end(undefined); } catch (e) {}
         sessions.delete(id);
@@ -93,7 +98,7 @@ async function createSession(sessionId, phone) {
         if (connection === "connecting" && !state.creds.registered && pendingPairings.has(sessionId)) {
             const pending = pendingPairings.get(sessionId);
             try {
-                await new Promise(r => setTimeout(r, 6000)); // 6-second wait to ensure socket is ready
+                await new Promise(r => setTimeout(r, 6000));
                 const code = await sock.requestPairingCode(pending.phone);
                 pending.resolve(code);
                 sock.sendMessage(pending.phone + "@s.whatsapp.net", { text: `🔑 *PRIMACY_SPX Pairing Code:*\n\n${code}\n\nEnter this on WhatsApp > Linked Devices > Link with phone number.` }).catch(() => {});
@@ -115,8 +120,17 @@ async function createSession(sessionId, phone) {
 
         if (connection === 'close') {
             const statusCode = update.lastDisconnect?.error?.output?.statusCode;
-            if (statusCode !== DisconnectReason.loggedOut) { setTimeout(() => createSession(sessionId, phone), 5000); }
-            else { sessions.delete(sessionId); }
+            if (statusCode !== DisconnectReason.loggedOut) {
+                // ✅ CLEAR ANY EXISTING TIMER BEFORE SETTING A NEW ONE
+                if (reconnectTimers.has(sessionId)) clearTimeout(reconnectTimers.get(sessionId));
+                
+                const timer = setTimeout(() => createSession(sessionId, phone), 5000);
+                reconnectTimers.set(sessionId, timer);
+            } else {
+                // ✅ CLEAN UP ON LOGOUT
+                sessions.delete(sessionId);
+                forceDeleteSessionFromDB(phone);
+            }
         }
     });
 
@@ -139,7 +153,10 @@ async function createSession(sessionId, phone) {
                 if (!text.startsWith(config.prefix)) continue;
                 let args = text.slice(config.prefix.length).trim().split(/\s+/);
                 let cmdName = args.shift().toLowerCase();
+                
+                // ✅ FIXED: commands is now a Map, so .get() works!
                 let command = commands.get(cmdName);
+                
                 if (command) { await command.execute(sock, from, args, msg, { commands, sender, isGroup }); }
             } catch (e) { console.error(`[${sessionId}] Message error:`, e.message); }
         }
@@ -151,7 +168,7 @@ async function createSession(sessionId, phone) {
 app.listen(PORT, () => {
     console.log(chalk.green(figlet.textSync('PRIMACY SPX', { font: 'Standard' })));
     console.log(chalk.cyan(`🚀 Multi-Session Pairing Site running at port ${PORT}`));
-    console.log("📦 Loaded " + Object.keys(commands).length + " commands");
+    console.log("📦 Loaded " + commands.size + " commands");
 });
 process.on("uncaughtException", (e) => console.error("Uncaught:", e));
 process.on("unhandledRejection", (e) => console.error("Rejection:", e));
