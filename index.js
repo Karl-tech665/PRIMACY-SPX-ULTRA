@@ -7,7 +7,6 @@ const mongoose = require('mongoose');
 const figlet = require('figlet');
 const chalk = require('chalk');
 const pino = require('pino');
-// ─── CORRECT IMPORTS ───
 const { default: makeWASocket, fetchLatestBaileysVersion, DisconnectReason, proto } = require('@whiskeysockets/baileys');
 const { useMongoAuthState } = require('@ecync/wsm');
 
@@ -36,15 +35,21 @@ app.post('/pair', async (req, res) => {
     const id = `user_${phone}`;
     try {
         if (sessions.has(id)) return res.status(400).json({ error: "Session already active" });
-        await createSession(id, phone);
-        res.json({ success: true, message: "Pairing code sent!" });
+
+        // Wait a bit for the socket to initialize
+        await new Promise(r => setTimeout(r, 3000));
+
+        // Create session and get the code
+        const code = await createSession(id, phone);
+        
+        // SEND THE CODE BACK TO THE WEBSITE
+        res.json({ success: true, code: code });
     } catch (e) {
         res.status(500).json({ error: e.message });
     }
 });
 
 async function createSession(sessionId, phone) {
-    // ─── CORRECT USAGE OF MONGO AUTH STATE ───
     const { state, saveCreds } = await useMongoAuthState(MONGO_URI, { session: sessionId });
     const { version } = await fetchLatestBaileysVersion();
 
@@ -57,14 +62,34 @@ async function createSession(sessionId, phone) {
 
     sock.ev.on('creds.update', saveCreds);
 
+    // Generate the code
+    let generatedCode = null;
     setTimeout(async () => {
         try {
             const code = await sock.requestPairingCode(phone);
+            generatedCode = code;
+            
+            // Send it to DM (keep this if you want it there too)
             await sock.sendMessage(phone + "@s.whatsapp.net", { 
                 text: `🔑 *PRIMACY_SPX ULTRA Pairing Code:*\n\n${code}\n\nEnter this on WhatsApp > Linked Devices > Link with phone number.`
-            });
+            }).catch(() => {});
+
         } catch (e) { console.log(`[${sessionId}] Pairing Code failed:`, e.message); }
     }, 3000);
+
+    // Return the code to the frontend, or wait for it?
+    // The requestPairingCode has a delay, so we need to wait for it to finish.
+    // Let's make a promise to wait for the code.
+    return new Promise((resolve, reject) => {
+        setTimeout(async () => {
+            try {
+                const code = await sock.requestPairingCode(phone);
+                resolve(code);
+            } catch (e) {
+                reject(e);
+            }
+        }, 3000);
+    });
 
     sock.ev.on('connection.update', async (update) => {
         const { connection, lastDisconnect } = update;
@@ -103,7 +128,7 @@ async function createSession(sessionId, phone) {
     });
 
     sessions.set(sessionId, sock);
-    return sock;
+    // Note: This return is now handled by the Promise logic above.
 }
 
 app.listen(PORT, () => {
