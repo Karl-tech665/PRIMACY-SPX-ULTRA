@@ -276,7 +276,6 @@
 <body>
     <div class="pair-card">
         <div class="logo-wrapper">
-            <!-- LOGO UPDATED TO PRIMACY_SPX_ULTRA -->
             <img class="logo-img" src="https://i.imgur.com/C3irQ1X.jpeg" alt="PRIMACY_SPX">
         </div>
         <div class="bot-name">PRIMACY_SPX</div>
@@ -345,13 +344,13 @@
                 pairBtn.disabled = true;
                 pairBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Generating...';
                 try {
-                    const response = await fetch('/api/pair', {
+                    const response = await fetch('/pair', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ phone })
                     });
                     const data = await response.json();
-                    if (data.success) {
+                    if (response.ok && data.success) {
                         codeDisplay.textContent = data.code;
                         resultBox.classList.add('show');
                     } else {
@@ -378,4 +377,4 @@
         })();
     </script>
 </body>
-    </html>
+        </html>
