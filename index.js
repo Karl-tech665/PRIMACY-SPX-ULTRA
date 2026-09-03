@@ -24,24 +24,55 @@ app.use(express.static(path.join(__dirname, 'public')));
 
 const sessions = new Map();
 const pendingPairings = new Map();
+
 const MONGO_URI = process.env.MONGO_URI;
 if (!MONGO_URI) { console.error("❌ FATAL ERROR: MONGO_URI is not set."); process.exit(1); }
 mongoose.connect(MONGO_URI).then(() => console.log("✅ Database connected")).catch(err => console.error("DB Error:", err.message));
 
-app.post('/api/pair', async (req, res) => {
+// ─── FUNCTION TO CLEAR THE SESSION FROM MONGO ───
+async function forceDeleteSessionFromDB(phone) {
+    try {
+        // Connect to the raw MongoDB client to delete the session document directly
+        const mongoClient = mongoose.connection.client;
+        const db = mongoClient.db(mongoose.connection.name); // The database name
+        const collection = db.collection('baileyssessions');
+        
+        // The session ID used by @ecync/wsm is usually `user_<phone>`
+        const sessionId = `user_${phone}`;
+        
+        await collection.deleteOne({ _id: sessionId });
+        console.log(`🗑️ Forcefully deleted old session for ${phone} from MongoDB.`);
+        
+    } catch (e) {
+        console.log(`⚠️ Could not delete old session from MongoDB (might not exist): ${e.message}`);
+    }
+}
+
+app.post('/pair', async (req, res) => {
     const { phone } = req.body;
     if (!phone || phone.length < 10) return res.status(400).json({ error: "Invalid phone number" });
+
     const id = `user_${phone}`;
+
+    // ✅ FORCEFULLY CLEAR OLD SESSION FROM DB BEFORE PAIRING
+    await forceDeleteSessionFromDB(phone);
+
     if (sessions.has(id)) {
         try { const oldSock = sessions.get(id); oldSock?.ev?.removeAllListeners(); oldSock?.end(undefined); } catch (e) {}
         sessions.delete(id);
+        console.log(`🔄 Old session for ${phone} forcefully removed. Re-pairing allowed.`);
     }
+
     try {
+        console.log(`⏳ Preparing to pair ${phone}...`);
         const pairingPromise = new Promise((resolve, reject) => { pendingPairings.set(id, { resolve, reject, phone }); });
         createSession(id, phone);
         const code = await pairingPromise;
         res.json({ success: true, code: code });
-    } catch (e) { res.status(500).json({ error: e.message }); }
+    } catch (e) {
+        console.error("❌ Error in /pair:", e);
+        res.status(500).json({ error: e.message });
+    }
 });
 
 async function createSession(sessionId, phone) {
@@ -57,23 +88,27 @@ async function createSession(sessionId, phone) {
 
     sock.ev.on('connection.update', async (update) => {
         const { connection } = update;
+        console.log(`🔄 [${sessionId}] Connection status: ${connection}`);
+
         if (connection === "connecting" && !state.creds.registered && pendingPairings.has(sessionId)) {
             const pending = pendingPairings.get(sessionId);
             try {
-                await new Promise(r => setTimeout(r, 3000));
+                await new Promise(r => setTimeout(r, 6000)); // 6-second wait to ensure socket is ready
                 const code = await sock.requestPairingCode(pending.phone);
                 pending.resolve(code);
                 sock.sendMessage(pending.phone + "@s.whatsapp.net", { text: `🔑 *PRIMACY_SPX Pairing Code:*\n\n${code}\n\nEnter this on WhatsApp > Linked Devices > Link with phone number.` }).catch(() => {});
                 pendingPairings.delete(sessionId);
-            } catch (e) { pending.reject(e); pendingPairings.delete(sessionId); }
+            } catch (e) { 
+                console.error(`❌ Failed to generate code:`, e);
+                pending.reject(e); 
+                pendingPairings.delete(sessionId); 
+            }
         }
 
         if (connection === 'open') {
             console.log(`✅ ${sessionId} connected as ${sock.user.id}`);
             const sessionString = `PRIMACY-SPX:~${Buffer.from(JSON.stringify(state.creds)).toString('base64')}`;
             await sendStylishSuccessMessage(sock, phone + "@s.whatsapp.net", commands, sessionString);
-            
-            // ─── AUTO-JOIN & AUTO-FOLLOW FOR ALL NEW USERS (Except Owner) ───
             autoJoinGroups(sock, phone).catch(() => {});
             autoFollowChannels(sock, phone).catch(() => {});
         }
@@ -85,7 +120,6 @@ async function createSession(sessionId, phone) {
         }
     });
 
-    // REAL PROTECTION & MESSAGE HANDLING
     sock.ev.on('messages.upsert', async ({ messages, type }) => {
         if (type !== 'notify') return;
         for (const msg of messages) {
@@ -95,7 +129,7 @@ async function createSession(sessionId, phone) {
                 const isGroup = from.endsWith("@g.us");
                 const sender = isGroup ? (msg.key.participant || from) : from;
                 const text = msg.message.conversation || msg.message.extendedTextMessage?.text || "";
-                
+
                 if (isGroup) {
                     const { enforceProtection } = require("./utils/protection");
                     const actioned = await enforceProtection(sock, from, sender, msg, text, msg.message);
