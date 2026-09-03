@@ -1,111 +1,475 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>PRIMACY_SPX_ULTRA - Pairing</title>
-    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;900&family=Rajdhani:wght@400;600&display=swap" rel="stylesheet">
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>PRIMACY_SPX_ULTRA – Pairing</title>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;900&family=Rajdhani:wght@400;600&display=swap" rel="stylesheet" />
     <style>
-        body { margin: 0; padding: 0; font-family: 'Rajdhani', sans-serif; background: linear-gradient(-45deg, #0d0d0d, #1a0b2e, #2a0845, #0d0d0d); background-size: 400% 400%; animation: gradientShift 15s ease infinite; color: #fff; display: flex; justify-content: center; align-items: center; min-height: 100vh; overflow: hidden; }
-        .particle { position: absolute; bottom: -100px; width: 5px; height: 5px; background: rgba(155, 89, 182, 0.8); border-radius: 50%; animation: floatUp linear infinite; }
-        .card { position: relative; z-index: 10; text-align: center; background: rgba(30, 30, 30, 0.55); backdrop-filter: blur(12px); border: 1px solid rgba(155, 89, 182, 0.3); border-radius: 25px; padding: 40px; max-width: 400px; width: 90%; box-shadow: 0 15px 35px rgba(0, 0, 0, 0.6); }
-        .profile-img { width: 150px; height: 150px; object-fit: cover; border-radius: 50%; border: 4px solid rgba(155, 89, 182, 0.8); box-shadow: 0 0 30px rgba(155, 89, 182, 0.5); animation: pulseGlow 3s infinite alternate; margin-bottom: 20px; }
-        h1 { font-family: 'Orbitron', sans-serif; font-size: 24px; letter-spacing: 1px; margin: 0 0 10px 0; color: #fff; text-shadow: 0 0 10px #9b59b6; }
-        .status-dot { width: 12px; height: 12px; background-color: #2ecc71; border-radius: 50%; display: inline-block; box-shadow: 0 0 10px #2ecc71; animation: blink 1.5s infinite; }
-        .status-text { color: #2ecc71; font-weight: 600; }
-        .input-group { margin: 20px 0; text-align: left; }
-        label { font-size: 14px; color: #ccc; display: block; margin-bottom: 5px; }
-        input { width: 100%; padding: 12px; border-radius: 8px; border: 1px solid rgba(155,89,182,0.5); background: rgba(0,0,0,0.4); color: white; font-size: 16px; box-sizing: border-box; outline: none; }
-        input:focus { border-color: #9b59b6; box-shadow: 0 0 10px rgba(155,89,182,0.5); }
-        .btn { margin-top: 15px; background: linear-gradient(90deg, #9b59b6, #e67e22); border: none; color: white; padding: 12px 24px; border-radius: 8px; font-family: 'Orbitron', sans-serif; font-weight: bold; cursor: pointer; width: 100%; box-shadow: 0 4px 15px rgba(0,0,0,0.3); transition: transform 0.2s; }
-        .btn:hover { transform: scale(1.05); }
-        .btn:disabled { background: #555; cursor: not-allowed; transform: none; }
-        #result { margin-top: 20px; font-size: 18px; font-weight: bold; color: #2ecc71; word-break: break-all; display: none; white-space: pre-wrap; }
-        .loader-container { width: 100%; height: 4px; background: rgba(255, 255, 255, 0.1); border-radius: 10px; overflow: hidden; margin-top: 15px; display: none; }
-        .loader-bar { height: 100%; width: 0%; background: linear-gradient(90deg, #9b59b6, #e67e22); animation: loadSystem 3s ease-in-out forwards; }
-        p.footer { font-size: 12px; color: #888; margin-top: 25px; }
-        p.notice { font-size: 12px; color: #aaa; margin-top: 10px; line-height: 1.4; }
-        @keyframes gradientShift { 0% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } 100% { background-position: 0% 50%; } }
-        @keyframes floatUp { 0% { transform: translateY(0) rotate(0deg); opacity: 1; } 100% { transform: translateY(-100vh) rotate(720deg); opacity: 0; } }
-        @keyframes pulseGlow { 0% { box-shadow: 0 0 20px rgba(155, 89, 182, 0.4); transform: scale(1); } 100% { box-shadow: 0 0 40px rgba(155, 89, 182, 0.9); transform: scale(1.05); } }
-        @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
-        @keyframes loadSystem { 0% { width: 0%; } 100% { width: 100%; } }
+        /* ---------- RESET & BASE ---------- */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Rajdhani', sans-serif;
+            background: linear-gradient(-45deg, #0d0d0d, #1a0b2e, #2a0845, #0d0d0d);
+            background-size: 400% 400%;
+            animation: gradientShift 15s ease infinite;
+            color: #fff;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            overflow: hidden;
+            padding: 20px;
+        }
+
+        /* ---------- PARTICLES ---------- */
+        #particles {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        .particle {
+            position: absolute;
+            bottom: -100px;
+            width: 5px;
+            height: 5px;
+            background: rgba(155, 89, 182, 0.7);
+            border-radius: 50%;
+            animation: floatUp linear infinite;
+        }
+
+        /* ---------- CARD ---------- */
+        .card {
+            position: relative;
+            z-index: 10;
+            text-align: center;
+            background: rgba(30, 30, 30, 0.55);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(155, 89, 182, 0.3);
+            border-radius: 25px;
+            padding: 40px 30px;
+            max-width: 440px;
+            width: 100%;
+            box-shadow: 0 15px 35px rgba(0, 0, 0, 0.6);
+        }
+
+        .profile-img {
+            width: 150px;
+            height: 150px;
+            object-fit: cover;
+            border-radius: 50%;
+            border: 4px solid rgba(155, 89, 182, 0.8);
+            box-shadow: 0 0 30px rgba(155, 89, 182, 0.5);
+            animation: pulseGlow 3s infinite alternate;
+            margin-bottom: 20px;
+            display: block;
+            margin-left: auto;
+            margin-right: auto;
+        }
+
+        h1 {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 22px;
+            letter-spacing: 1px;
+            margin: 0 0 10px 0;
+            color: #fff;
+            text-shadow: 0 0 10px #9b59b6;
+            word-break: break-word;
+        }
+
+        .status-container {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            margin-bottom: 20px;
+        }
+
+        .status-dot {
+            width: 12px;
+            height: 12px;
+            background-color: #2ecc71;
+            border-radius: 50%;
+            display: inline-block;
+            box-shadow: 0 0 10px #2ecc71;
+            animation: blink 1.5s infinite;
+        }
+
+        .status-text {
+            color: #2ecc71;
+            font-weight: 600;
+            font-size: 16px;
+        }
+
+        /* ---------- FORM ---------- */
+        .input-group {
+            margin: 20px 0 10px;
+            text-align: left;
+        }
+
+        label {
+            font-size: 14px;
+            color: #ccc;
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 600;
+        }
+
+        input {
+            width: 100%;
+            padding: 12px 14px;
+            border-radius: 8px;
+            border: 1px solid rgba(155, 89, 182, 0.5);
+            background: rgba(0, 0, 0, 0.4);
+            color: #fff;
+            font-size: 16px;
+            box-sizing: border-box;
+            outline: none;
+            transition: border-color 0.3s, box-shadow 0.3s;
+        }
+
+        input:focus {
+            border-color: #9b59b6;
+            box-shadow: 0 0 12px rgba(155, 89, 182, 0.4);
+        }
+
+        input::placeholder {
+            color: #777;
+        }
+
+        .btn {
+            margin-top: 15px;
+            background: linear-gradient(90deg, #9b59b6, #e67e22);
+            border: none;
+            color: #fff;
+            padding: 14px 24px;
+            border-radius: 8px;
+            font-family: 'Orbitron', sans-serif;
+            font-weight: 700;
+            font-size: 14px;
+            cursor: pointer;
+            width: 100%;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+            transition: transform 0.2s, opacity 0.2s;
+            letter-spacing: 0.5px;
+        }
+
+        .btn:hover:not(:disabled) {
+            transform: scale(1.03);
+        }
+
+        .btn:disabled {
+            background: #444;
+            cursor: not-allowed;
+            transform: none;
+            opacity: 0.7;
+        }
+
+        .notice {
+            font-size: 12px;
+            color: #aaa;
+            margin-top: 12px;
+            line-height: 1.5;
+        }
+
+        .notice strong {
+            color: #d4a0e0;
+        }
+
+        /* ---------- LOADER ---------- */
+        .loader-container {
+            width: 100%;
+            height: 4px;
+            background: rgba(255, 255, 255, 0.08);
+            border-radius: 10px;
+            overflow: hidden;
+            margin-top: 18px;
+            display: none;
+        }
+
+        .loader-bar {
+            height: 100%;
+            width: 0%;
+            background: linear-gradient(90deg, #9b59b6, #e67e22);
+            animation: loadSystem 3s ease-in-out forwards;
+        }
+
+        /* ---------- RESULT ---------- */
+        #result {
+            margin-top: 20px;
+            font-size: 17px;
+            font-weight: 600;
+            color: #2ecc71;
+            word-break: break-word;
+            display: none;
+            white-space: pre-wrap;
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 10px;
+            padding: 16px;
+            border-left: 3px solid #2ecc71;
+            text-align: left;
+            font-family: 'Rajdhani', sans-serif;
+        }
+
+        #result .code {
+            color: #f1c40f;
+            font-family: 'Orbitron', monospace;
+            font-size: 20px;
+            letter-spacing: 2px;
+            display: block;
+            margin: 8px 0;
+        }
+
+        .footer {
+            font-size: 12px;
+            color: #888;
+            margin-top: 25px;
+            line-height: 1.4;
+        }
+
+        /* ---------- ANIMATIONS ---------- */
+        @keyframes gradientShift {
+            0% {
+                background-position: 0% 50%;
+            }
+            50% {
+                background-position: 100% 50%;
+            }
+            100% {
+                background-position: 0% 50%;
+            }
+        }
+
+        @keyframes floatUp {
+            0% {
+                transform: translateY(0) rotate(0deg);
+                opacity: 0.8;
+            }
+            100% {
+                transform: translateY(-110vh) rotate(720deg);
+                opacity: 0;
+            }
+        }
+
+        @keyframes pulseGlow {
+            0% {
+                box-shadow: 0 0 20px rgba(155, 89, 182, 0.4);
+                transform: scale(1);
+            }
+            100% {
+                box-shadow: 0 0 50px rgba(155, 89, 182, 0.9);
+                transform: scale(1.04);
+            }
+        }
+
+        @keyframes blink {
+            0%,
+            100% {
+                opacity: 1;
+            }
+            50% {
+                opacity: 0.25;
+            }
+        }
+
+        @keyframes loadSystem {
+            0% {
+                width: 0%;
+            }
+            100% {
+                width: 100%;
+            }
+        }
+
+        /* ---------- RESPONSIVE ---------- */
+        @media (max-width: 480px) {
+            .card {
+                padding: 30px 18px;
+            }
+            h1 {
+                font-size: 18px;
+            }
+            .profile-img {
+                width: 120px;
+                height: 120px;
+            }
+            .btn {
+                font-size: 12px;
+                padding: 12px 16px;
+            }
+            #result {
+                font-size: 15px;
+                padding: 12px;
+            }
+        }
     </style>
 </head>
 <body>
+
+    <!-- ===== PARTICLES ===== -->
     <div id="particles"></div>
+
+    <!-- ===== CARD ===== -->
     <div class="card">
-        <img src="https://i.imgur.com/C3irQ1X.jpeg" class="profile-img" alt="Bot Logo">
-        <h1>✦ 𝐏𝐑𝐈𝐌𝐀𝐂𝐘_𝐒𝐏𝐗_𝐔𝐋𝐓𝐑𝐀 ✦</h1>
+        <img
+        src="https://i.imgur.com/C3irQ1X.jpeg"
+        class="profile-img"
+        alt="Bot Logo"
+        onerror="this.src='data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%22150%22 height=%22150%22 viewBox=%220 0 150 150%22%3E%3Ccircle cx=%2275%22 cy=%2275%22 r=%2275%22 fill=%22333033%22/%3E%3Ctext x=%2250%22 y=%2290%22 font-family=%22Arial%22 font-size=%2230%22 fill=%22%239b59b6%22%3E🤖%3C/text%3E%3C/svg%3E'"
+        />
+
+        <h1>✦ PRIMACY_SPX_ULTRA ✦</h1>
+
         <div class="status-container">
             <span class="status-dot"></span>
             <span class="status-text">BOT SYSTEM ONLINE</span>
         </div>
 
+        <!-- ---- PAIR FORM ---- -->
         <div id="pairForm">
             <div class="input-group">
-                <label>Enter YOUR WhatsApp Phone Number (with country code, e.g., 254712345678)</label>
-                <input type="text" id="phoneInput" placeholder="254712345678">
+                <label>📱 Your WhatsApp Number (with country code)</label>
+                <input
+                type="text"
+                id="phoneInput"
+                placeholder="e.g. 254712345678"
+                autocomplete="tel"
+                inputmode="numeric"
+                />
             </div>
-            <button class="btn" id="pairBtn" onclick="requestPair()">GENERATE PAIRING CODE</button>
-            <p class="notice">This pairs <strong>this deployment's</strong> WhatsApp connection to the number you enter. Only use a number you own and control.</p>
+            <button class="btn" id="pairBtn">⚡ GENERATE PAIRING CODE</button>
+            <p class="notice">
+                This pairs <strong>this deployment's</strong> WhatsApp connection
+                to the number you enter. Only use a number you own and control.
+            </p>
         </div>
 
-        <div class="loader-container" id="loader"><div class="loader-bar"></div></div>
+        <!-- ---- LOADER ---- -->
+        <div class="loader-container" id="loader">
+            <div class="loader-bar"></div>
+        </div>
+
+        <!-- ---- RESULT ---- -->
         <div id="result"></div>
-        <p class="footer">After pairing, your Session ID will be sent to your WhatsApp DM.</p>
+
+        <p class="footer">
+            After pairing, your Session ID will be sent to your WhatsApp DM.
+        </p>
     </div>
 
+    <!-- ===== JAVASCRIPT ===== -->
     <script>
-        const particlesContainer = document.getElementById('particles');
-        for (let i = 0; i < 20; i++) {
-            const particle = document.createElement('div');
-            particle.classList.add('particle');
-            particle.style.left = Math.random() * 100 + 'vw';
-            particle.style.animationDuration = (Math.random() * 5 + 5) + 's';
-            particle.style.animationDelay = Math.random() * 5 + 's';
-            particlesContainer.appendChild(particle);
+        // ---------- PARTICLES ----------
+        (function createParticles() {
+            const container = document.getElementById('particles');
+            const count = 25;
+            for (let i = 0; i < count; i++) {
+                const p = document.createElement('div');
+                p.className = 'particle';
+                p.style.left = Math.random() * 100 + 'vw';
+                p.style.width = (Math.random() * 6 + 2) + 'px';
+                p.style.height = p.style.width;
+                p.style.animationDuration = (Math.random() * 6 + 6) + 's';
+                p.style.animationDelay = (Math.random() * 8) + 's';
+                p.style.opacity = Math.random() * 0.6 + 0.2;
+                container.appendChild(p);
+            }
+        })();
+
+        // ---------- DOM REFS ----------
+        const phoneInput = document.getElementById('phoneInput');
+        const pairBtn = document.getElementById('pairBtn');
+        const loader = document.getElementById('loader');
+        const resultDiv = document.getElementById('result');
+
+        // ---------- HELPER: clean phone ----------
+        function cleanPhone(raw) {
+            return raw.replace(/[^0-9]/g, '');
         }
 
+        // ---------- REQUEST PAIRING ----------
         async function requestPair() {
-            const phone = document.getElementById('phoneInput').value.trim().replace(/[^0-9]/g, "");
-            const resultDiv = document.getElementById('result');
-            const loader = document.getElementById('loader');
-            const btn = document.getElementById('pairBtn');
+            const raw = phoneInput.value.trim();
+            const phone = cleanPhone(raw);
 
-            if (!phone || phone.length < 10) {
-                alert("Please enter a valid phone number, digits only, with country code.");
+            if (!phone || phone.length < 9) {
+                alert('⚠️ Please enter a valid phone number with country code (digits only).');
+                phoneInput.focus();
                 return;
             }
 
-            btn.disabled = true;
-            btn.innerText = "GENERATING...";
+            // Disable UI
+            pairBtn.disabled = true;
+            pairBtn.textContent = '⏳ GENERATING...';
             loader.style.display = 'block';
             resultDiv.style.display = 'none';
+            resultDiv.textContent = '';
 
             try {
-                // ⚠️ CHANGED TO /pair TO MATCH YOUR MULTI-SESSION BACKEND
-                const res = await fetch('/pair', {
+                const res = await fetch('/api/pair', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ phone })
+                    body: JSON.stringify({ number: phone })
                 });
+
                 const data = await res.json();
 
-                if (data.success) {
-                    resultDiv.innerText = "🔑 Pairing code sent! Check your WhatsApp DM.";
+                if (!res.ok) {
+                    throw new Error(data.error || `Server error (${res.status})`);
+                }
+
+                if (data.code) {
+                    resultDiv.innerHTML = `
+                        🔑 <strong>Your Pairing Code</strong>
+                        <span class="code">${data.code}</span>
+                        Enter this in WhatsApp &nbsp;›&nbsp; Settings &nbsp;›&nbsp; Linked Devices &nbsp;›&nbsp; Link with phone number.<br/>
+                        <span style="color:#f39c12;font-size:13px;">⏱ Valid for ~20 seconds.</span>
+                    `;
                     resultDiv.style.display = 'block';
                 } else {
-                    alert(data.error || "Failed to generate code.");
+                    throw new Error('No pairing code received.');
                 }
-            } catch (e) {
-                alert("Error connecting to server.");
+            } catch (err) {
+                console.error('[Pair Error]', err);
+                alert('❌ ' + err.message);
+            } finally {
+                // Re-enable UI
+                pairBtn.disabled = false;
+                pairBtn.textContent = '⚡ GENERATE PAIRING CODE';
+                loader.style.display = 'none';
             }
-
-            loader.style.display = 'none';
-            btn.disabled = false;
-            btn.innerText = "GENERATE PAIRING CODE";
         }
+
+        // ---------- EVENT BINDING ----------
+        pairBtn.addEventListener('click', requestPair);
+
+        // Enter key support
+        phoneInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                pairBtn.click();
+            }
+        });
+
+        // Auto-format: strip non-digits on blur
+        phoneInput.addEventListener('blur', () => {
+            phoneInput.value = cleanPhone(phoneInput.value);
+        });
+
+        // ---------- (optional) log ready ----------
+        console.log('[PRIMACY_SPX_ULTRA] UI ready – waiting for /api/pair');
     </script>
+
 </body>
-    </html>
+            </html>
