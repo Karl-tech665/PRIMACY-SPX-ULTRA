@@ -104,4 +104,52 @@ module.exports = [
     ...['randomname', 'randomnumber', 'randomhex', 'randomuuid', 'randomip', 'randomcolor', 'randomword', 'randombool', 'randomemoji', 'randomadvice', 'randompassword', 'randomcard'].map(name => ({ name, async execute(sock, from) { let output; if (name === 'randomname') output = `Name: ${Math.random().toString(36).substring(2, 8)}`; else if (name === 'randomnumber') output = `Number: ${Math.floor(Math.random() * 1000000)}`; else if (name === 'randomhex') output = `Hex: #${Math.floor(Math.random()*16777215).toString(16)}`; else if (name === 'randomuuid') output = `UUID: ${crypto.randomUUID()}`; else if (name === 'randomip') output = `IP: ${Math.floor(Math.random()*255)}.${Math.floor(Math.random()*255)}.${Math.floor(Math.random()*255)}.${Math.floor(Math.random()*255)}`; else if (name === 'randomcolor') output = `Color: #${Math.floor(Math.random()*16777215).toString(16)}`; else if (name === 'randompassword') output = `Password: ${Math.random().toString(36).slice(-10)}`; else output = `✨ ${name}: ${Math.random().toString(36).substring(2, 10)}`; await sock.sendMessage(from, { text: output }); } })),
 
     // ── REAL FUN COMMANDS ──
-    ...['wouldyourather', 'dadjoke', 'devjoke', 'motivation', 'affirmation'].map(name => ({ name, async execute(sock, from) { let output; if (name === 'wouldyourather') output = `🤔 Would you rather: ${["Eat a bug or eat a spider?", "Never use the internet again or never eat pizza again?"][Math.floor(Math.random()*2)]}`; else if (name === 'motivation') output = `💪 Motivation: ${["Believe you can and you're halfway there.", "It does not matter how slowly you go as long as you do not stop."][Math.floor(Math.random()*2)]}`; else if (name === 'affirmation') output = `✨ Affirmation: ${["I am worthy of love and respect.", "I am in control of my happiness."][Math.floor(Math.random()*2)]}`; else if (name === 'dadjoke') output = `😆 Dad Joke: ${["Why don't scientists trust atoms? Because they make up everything!", "What do you call a fish with no eyes? Fsh!"][Math.floor(Math.random()*2)]}`; else if (name === 'devjoke') output = `💻 Dev Joke: ${["Why do programmers prefer dark mode? Light attracts bugs!", "There are only 10 types of people in the world: those who understand binary, and those who don't."][Math.floor(Math.random()*2)]}`; else output = `✨ ${name}`; await sock.sendMessage(from, { text: output }); } }))];
+    ...['wouldyourather', 'dadjoke', 'devjoke', 'motivation', 'affirmation'].map(name => ({ name, async execute(sock, from) { let output; if (name === 'wouldyourather') output = `🤔 Would you rather: ${["Eat a bug or eat a spider?", "Never use the internet again or never eat pizza again?"][Math.floor(Math.random()*2)]}`; else if (name === 'motivation') output = `💪 Motivation: ${["Believe you can and you're halfway there.", "It does not matter how slowly you go as long as you do not stop."][Math.floor(Math.random()*2)]}`; else if (name === 'affirmation') output = `✨ Affirmation: ${["I am worthy of love and respect.", "I am in control of my happiness."][Math.floor(Math.random()*2)]}`; else if (name === 'dadjoke') output = `😆 Dad Joke: ${["Why don't scientists trust atoms? Because they make up everything!", "What do you call a fish with no eyes? Fsh!"][Math.floor(Math.random()*2)]}`; else if (name === 'devjoke') output = `💻 Dev Joke: ${["Why do programmers prefer dark mode? Light attracts bugs!", "There are only 10 types of people in the world: those who understand binary, and those who don't."][Math.floor(Math.random()*2)]}`; else output = `✨ ${name}`; await sock.sendMessage(from, { text: output }); } }))
+    // ── CURL (Fetch raw content from a URL) ──
+    { name:"curl", async execute(sock,from,args){
+        if(!args.length) return sock.sendMessage(from,{text:"❌ .curl <url>\nExample: .curl https://api.github.com"});
+        let url = args[0];
+        if(!/^https?:\/\//i.test(url)) url = "https://" + url;
+        try {
+            const res = await fetch(url, { headers: { "User-Agent": "Mozilla/5.0" } });
+            const contentType = res.headers.get("content-type") || "";
+            let text = await res.text();
+            if (text.length > 3500) text = text.slice(0, 3500) + "\n\n... (truncated, " + text.length + " chars total)";
+            await sock.sendMessage(from, { text: `🌐 *${res.status} ${res.statusText}* — ${contentType}\n\n\`\`\`${text}\`\`\`` });
+        } catch (e) {
+            await sock.sendMessage(from, { text: "❌ Request failed: " + e.message });
+        }
+    }},
+
+    // ── PRIME 🐞 (Bot-aware AI assistant) ──
+    { name:"prime", aliases:["void"], async execute(sock,from,args,msg,extra={}){
+        if(!args.length) return sock.sendMessage(from,{text:"🐞 *Prime*\nAsk me anything — about this bot, or anything else.\nExample: .prime what commands do you have?"});
+        const apiKey = process.env.GEMINI_API_KEY;
+        if(!apiKey) return sock.sendMessage(from,{text:"🐞 Prime needs GEMINI_API_KEY set in your host's Environment settings to work."});
+
+        const cmdCount = Object.keys(extra.commands || {}).length;
+        const prompt = `You are Prime 🐞, the AI assistant built into the WhatsApp bot "${config.botName}".
+Known facts about this bot:
+- Prefix: ${config.prefix}
+- Owner: ${config.ownerNumber}
+- Loaded commands: ${cmdCount}
+- Proxy: ${config.PROXY.LINK} (more at ${config.PROXY.WEBSITE})
+- Menu command: type ${config.prefix}menu for the full command list.
+Answer naturally and helpfully. Keep answers concise unless asked for detail.
+
+User's message: ` + args.join(" ");
+
+        try {
+            const res = await fetch("https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=" + apiKey, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
+            });
+            const data = await res.json();
+            const reply = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+            await sock.sendMessage(from, { text: reply ? "🐞 " + reply : "🐞 No response from Prime right now." });
+        } catch (e) {
+            await sock.sendMessage(from, { text: "🐞 Prime error: " + e.message });
+        }}}}
+];
+}}];
