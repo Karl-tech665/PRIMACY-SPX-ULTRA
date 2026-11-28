@@ -1,0 +1,27 @@
+name: Unpack bot archive
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  unpack:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Get the repository
+        uses: actions/checkout@v4
+
+      - name: Unpack the bot files (your README is kept as it is)
+        run: |
+          tar -xzf bot.tar.gz --exclude='./README.md'
+          rm bot.tar.gz
+
+      - name: Save the files into the repository
+        run: |
+          git config user.name "github-actions"
+          git config user.email "github-actions@users.noreply.github.com"
+          git add -A
+          git commit -m "Unpack bot files"
+          git push
